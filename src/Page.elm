@@ -250,6 +250,8 @@ fragmentShader =
         uniform vec2 textureSize;
         uniform float v1, v2, v3, v4, v5, v6, v7, v8;
 
+        float PI = 3.1415926535897932384626433832795;
+
         float fromTexture(in vec2 uv){
             if(abs(uv.x) < 1.0 && abs(uv.y) < 0.5){
                 vec4 temp = texture2D(texture, vec2(uv.x * 0.5 + 0.5, uv.y + 0.5));
@@ -261,23 +263,30 @@ fragmentShader =
         }
 
         float v(float value){
-            return 1.0 - value;
+            return pow(1.0 - value, 1.8);
+        }
+
+        mat2 rotate(float a){
+             float rad = 2.0 * PI * a;
+             float s = sin(rad);
+             float c = cos(rad);
+             return mat2(c, s, -s, c);
         }
 
         void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
             vec2 uv = fragCoord.xy / iResolution.xy;
-            uv = (uv * 2.0 - 1.0);
+            uv = (uv * 2.0 - 1.0) * 3.0;
 
             uv.x *= iResolution.x / iResolution.y;
             float time = iGlobalTime * 0.3;
 
             vec3 color = vec3(
-                           fromTexture(mat2(v(v5), 0.0,
-                                            0.0, v(v1)) * uv) * v(v1),
-                           fromTexture(mat2(v(v7), 0.0,
-                                            0.0, v(v2)) * uv) * v(v2),
-                           fromTexture(mat2(v(v8), 0.0,
-                                            0.0, v(v4)) * uv) * v(v3));
+                           fromTexture(mat2(v(v5), -uv.x * v(v1) * 0.1,
+                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0),
+                           fromTexture(mat2(v(v8), uv.x * uv.y * v(v8) * 0.05,
+                                            0.0, v(v4)) * uv) * v((v3 + v1) / 2.0),
+                           fromTexture(mat2(v(v7), uv.y * v(v3) * 0.05,
+                                            uv.x * v(v7) * 0.1, v(v2)) * uv) * v((v2 + v8) / 2.0));
 
             fragColor = vec4(1.0 - color, 1.0);
         }
