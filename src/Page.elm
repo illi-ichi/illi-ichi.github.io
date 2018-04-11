@@ -35,6 +35,7 @@ type alias ForInitial =
 type alias ForPlay =
     { size : Window.Size
     , position : Mouse.Position
+    , duration: Float
     , freq : Float
     , texture : WebGL.Texture
     , elapsed : Time
@@ -114,6 +115,7 @@ updateForInitial action model =
                 |> Maybe.map (\texture ->
                      Playing { size = model.size
                              , position = position
+                             , duration = 1.0
                              , freq = freq
                              , elapsed = 0
                              , texture = texture
@@ -133,7 +135,10 @@ updateForPlay action model =
         Resize size ->
             Playing { model | size = size } ! []
         MouseClicked position ->
-            Playing { model | position = position, freq = calcurateBaseFrequency model.size position } ! []
+            Playing { model
+            | position = position
+            , duration = 1.0
+            , freq = calcurateBaseFrequency model.size position } ! []
         Animate elapsed ->
             let newVols = model.vols
                           |> List.indexedMap (envelope (elapsed / 1000))
@@ -141,10 +146,12 @@ updateForPlay action model =
                        |> List.indexedMap (\i v -> (i, v))
                        |> List.filter (\t -> Tuple.second t < 0)
                        |> List.map Tuple.first |> playSines model.freq
+                duration = envelope (elapsed / 1000) 1 model.duration
             in
                 Playing { model
                 | elapsed = elapsed + model.elapsed
                 , vols = newVols |> List.map (\v -> if (v < 0) then (1.0 + v) else v)
+                , duration = if (duration < 0.0) then 0.0 else duration
                 } ! cmds
         TextureLoad texture ->
             Debug.crash "Error texture load again?"
@@ -157,8 +164,11 @@ update action model =
     InitialPage model -> updateForInitial action model
     Playing model -> updateForPlay action model
 
+convertMousePosition : Window.Size -> Mouse.Position -> Float -> Vec3
+convertMousePosition size position duration = vec3 (toFloat position.x) (toFloat (size.height - position.y)) duration
+
 viewWebGl : ForPlay -> Html Action
-viewWebGl { size, texture, position, elapsed, vols} =
+viewWebGl { size, texture, position, elapsed, vols, duration} =
     case vols of
       [v1, v2, v3, v4, v5, v6, v7, v8] ->
           WebGL.toHtml
@@ -178,6 +188,7 @@ viewWebGl { size, texture, position, elapsed, vols} =
                                                (toFloat (Tuple.second (Texture.size texture)))
                           , v1 = v1, v2 = v2, v3 = v3, v4 = v4
                           , v5 = v5, v6 = v6, v7 = v7, v8 = v8
+                          , iMouse = convertMousePosition size position duration
                           }
                       ]
       _ -> Debug.crash "vols must be 8"
@@ -219,6 +230,7 @@ type alias Uniforms =
     , texture : WebGL.Texture
     , textureSize : Vec2
     , v1: Float, v2: Float, v3: Float, v4: Float, v5: Float, v6: Float, v7: Float, v8: Float
+    , iMouse : Vec3
     }
 
 
@@ -249,6 +261,7 @@ fragmentShader =
         uniform sampler2D texture;
         uniform vec2 textureSize;
         uniform float v1, v2, v3, v4, v5, v6, v7, v8;
+        uniform vec3 iMouse;
 
         float PI = 3.1415926535897932384626433832795;
 
@@ -260,6 +273,23 @@ fragmentShader =
             }else{
                 return 0.0;
             }
+        }
+
+        vec3 rgb2hsv(vec3 c) {
+            vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+            vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+            vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+            float d = q.x - min(q.w, q.y);
+            float e = 1.0e-10;
+            return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+        }
+
+        vec3 hsv2rgb(vec3 c)
+        {
+            vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+            vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+            return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
         }
 
         float v(float value){
@@ -276,18 +306,26 @@ fragmentShader =
         void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
             vec2 uv = fragCoord.xy / iResolution.xy;
             uv = (uv * 2.0 - 1.0) * 3.0;
-
             uv.x *= iResolution.x / iResolution.y;
+
             float time = iGlobalTime * 0.3;
+
+            vec2 dm = iMouse.xy / iResolution.xy;
+            dm = uv - (dm * 2.0 - 1.0) * 3.0;
+            dm.x *= iResolution.x / iResolution.y;
+
+            float circle_d = sqrt(dot(dm, dm)) * iMouse.z;
 
             vec3 color = vec3(
                            fromTexture(mat2(v(v5), -uv.x * v(v1) * 0.1,
-                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0),
+                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0) + iMouse.z,
                            fromTexture(mat2(v(v8), uv.x * uv.y * v(v8) * 0.05,
                                             0.0, v(v4)) * uv) * v((v3 + v1) / 2.0),
                            fromTexture(mat2(v(v7), uv.y * v(v3) * 0.05,
                                             uv.x * v(v7) * 0.1, v(v2)) * uv) * v((v2 + v8) / 2.0));
-
+            color = rgb2hsv(color);
+            color.x += circle_d * 0.01 + time;
+            color = hsv2rgb(color);
             fragColor = vec4(1.0 - color, 1.0);
         }
 
