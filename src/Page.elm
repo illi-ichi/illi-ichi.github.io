@@ -320,14 +320,12 @@ fragmentShader =
 
             vec3 color = vec3(
                            fromTexture(mat2(v(v5), -uv.x * v(v1) * 0.1,
-                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0) + circle_d,
+                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0),
                            fromTexture(mat2(v(v8), uv.x * uv.y * v(v8) * 0.05,
                                             0.0, v(v4)) * uv) * v((v3 + v1) / 2.0),
                            fromTexture(mat2(v(v7), uv.y * v(v3) * 0.05,
                                             uv.x * v(v7) * 0.1, v(v2)) * uv) * v((v2 + v8) / 2.0));
-            color = rgb2hsv(color);
-            color.x += circle_d * 0.01 + time;
-            color = hsv2rgb(color);
+            color += hsv2rgb(vec3(time + circle_d * 0.05 , 1.0, 1.0)) * iMouse.z;
             fragColor = vec4(1.0 - color, 1.0);
         }
 
