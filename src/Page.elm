@@ -275,6 +275,13 @@ fragmentShader =
             }
         }
 
+        vec2 convertUV(vec2 x){
+            vec2 uv = x / iResolution.xy;
+            uv = (uv * 2.0 - 1.0) * 3.0;
+            uv.x *= iResolution.x / iResolution.y;
+            return uv;
+        }
+
         vec3 rgb2hsv(vec3 c) {
             vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
             vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
@@ -304,21 +311,16 @@ fragmentShader =
         }
 
         void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
-            vec2 uv = fragCoord.xy / iResolution.xy;
-            uv = (uv * 2.0 - 1.0) * 3.0;
-            uv.x *= iResolution.x / iResolution.y;
-
+            vec2 uv = convertUV(fragCoord.xy);
             float time = iGlobalTime * 0.3;
 
-            vec2 dm = iMouse.xy / iResolution.xy;
-            dm = uv - (dm * 2.0 - 1.0) * 3.0;
-            dm.x *= iResolution.x / iResolution.y;
-
-            float circle_d = sqrt(dot(dm, dm)) * iMouse.z;
+            vec2 mouse = convertUV(iMouse.xy);
+            vec2 dm = uv - mouse;
+            float circle_d = abs((1.0 - iMouse.z) * 4.0 - sqrt(dot(dm, dm))) * iMouse.z;
 
             vec3 color = vec3(
                            fromTexture(mat2(v(v5), -uv.x * v(v1) * 0.1,
-                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0) + iMouse.z,
+                                            uv.y * v(v8) * 0.05, v(v1)) * uv) * v((v4 + v5) / 2.0) + circle_d,
                            fromTexture(mat2(v(v8), uv.x * uv.y * v(v8) * 0.05,
                                             0.0, v(v4)) * uv) * v((v3 + v1) / 2.0),
                            fromTexture(mat2(v(v7), uv.y * v(v3) * 0.05,
